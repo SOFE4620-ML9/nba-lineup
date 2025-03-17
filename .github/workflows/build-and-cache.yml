@@ -1,0 +1,46 @@
+name: Build and Cache
+
+on:
+  push:
+    branches: 
+      - feat/*
+      - users/*-main
+  pull_request:
+    branches: [ main, users/* ]
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, macos-latest ]
+        # You can add more platforms here if needed
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+        with:
+          logger: pretty
+          
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v12
+        with:
+          name: sofe4620ml9
+          # Using the organization's Cachix auth token stored in GitHub secrets
+          authToken: '${{ secrets.SOFE4620ML9_CACHIX }}'
+      
+      - name: Enable flakes
+        run: echo "experimental-features = nix-command flakes" | sudo tee -a /etc/nix/nix.conf
+        
+      - name: Build default package
+        run: nix build --print-build-logs
+        
+      - name: Build full model runner
+        run: nix build .#run-full --print-build-logs
+        
+      - name: Build test runner
+        run: nix build .#test --print-build-logs 
