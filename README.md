@@ -28,7 +28,8 @@ The dataset contains lineups of all NBA games from 2007 to 2015, including:
 ## Setup and Installation
 
 ### Using Nix Development Shell (Recommended)
-If you have Nix installed, you can use the development shell:
+> **Note:** If you don't have Nix installed, you can install it using the Determinate Nix Installer: `curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | \
+  sh -s -- install`
 
 ```bash
 # Activate the development environment
