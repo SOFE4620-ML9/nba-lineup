@@ -109,14 +109,46 @@ If needed, you can further use the `web_scraper.py` file to scrape the web page 
 - When searching for recent news, use the current year (2025) instead of previous years, or simply use the "recent" keyword to get the latest information
 - When using VS Code with NixOS on WSL, explicitly set the git.path in settings.json to help VS Code source control find the git executable
 - For VS Code to detect git repositories in NixOS-WSL, create a flake.nix with a devshell that includes git and use `nix develop` in the terminal profiles
+- For NBA lineup prediction, use scikit-learn, pandas, and numpy as core libraries with proper model evaluation techniques
+- In NixOS/WSL environments, use nix-shell with specific Python packages instead of pip/venv for consistent package management. When running Python scripts, use `nix-shell -p "python3.withPackages(ps: with ps; [package1 package2])" --run "python script.py"` to ensure all dependencies are available.
 
 # Scratchpad
 
-## Current Task: Fix VS Code Git Detection with NixOS-WSL
+## Current Task: NBA Lineup Prediction Project
 
-[X] Check if git is installed in NixOS
-[X] Verify the git repository is properly initialized
-[X] Add git.path setting to VS Code settings.json
-[X] Create a minimal flake.nix with devshell similar to working repos
-[X] Update VSCode settings to use nix develop
-[ ] Test if VS Code source control now detects the git repository
+Task: Develop a machine learning model to predict the optimal fifth player for a home team in NBA games.
+
+Plan:
+[X] Explore dataset structure to understand available data
+[X] Create project structure and organize code
+[X] Develop data processing modules
+[X] Create feature engineering and model components
+[X] Implement visualization tools
+[X] Create main script to tie everything together
+[X] Create Jupyter notebook for data exploration
+[X] Set up run script for model training and evaluation
+[ ] Fix environment issues to run the model
+[ ] Run model on small sample to verify functionality
+[ ] Fine-tune model parameters
+[ ] Run model on full dataset
+[ ] Analyze results
+
+The project structure is now complete:
+- `src/data/data_loader.py`: Loads and preprocesses NBA game data
+- `src/data/feature_engineering.py`: Transforms raw data into features for model training
+- `src/models/lineup_predictor.py`: Predicts the optimal fifth player for a home team
+- `src/visualization/visualizer.py`: Generates plots and charts for data analysis
+- `src/main.py`: Main script that ties everything together
+- `notebooks/exploratory_data_analysis.ipynb`: Jupyter notebook for data exploration
+- `run_model.sh`: Shell script to run the model on the full dataset
+
+Current progress:
+- We've identified issues with Python package management in the NixOS/WSL environment
+- We've updated the run_model.sh script to use nix-shell for package management instead of virtual environments
+- We're now installing the required packages and running the model on a small dataset (2015 only) to verify functionality
+
+Next steps:
+1. Continue with model testing and evaluation once the environment setup is complete
+2. Fine-tune model parameters for optimal performance if needed
+3. Run the model on the full dataset to generate final predictions
+4. Analyze results and create visualizations
