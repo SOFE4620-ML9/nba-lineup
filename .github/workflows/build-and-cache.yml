@@ -12,11 +12,7 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ ubuntu-latest, macos-latest ]
-        # You can add more platforms here if needed
+    runs-on: ubuntu-latest  # Removed macos matrix
     
     steps:
       - uses: actions/checkout@v3

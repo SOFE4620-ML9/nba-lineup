@@ -27,20 +27,58 @@ The dataset contains lineups of all NBA games from 2007 to 2015, including:
 
 ## Setup and Installation
 
-### Using Nix Development Shell (Recommended)
-> **Note:** If you don't have Nix installed, you can install it using the Determinate Nix Installer: `curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | \
-  sh -s -- install`
+### Instant Run with Nix (No Clone Needed!)
+The easiest way to use this project is to run it directly from GitHub using Nix Flakes without even cloning the repository:
+
+> **Note:** If you don't have Nix installed, you can install it using the Determinate Nix Installer: 
+> ```bash
+> curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
+> ```
 
 ```bash
-# Activate the development environment
-nix develop
+# Enable the binary cache for faster installation (one-time setup)
+nix run github:cachix/cachix -- use sofe4620ml9
 
-# Activate Python virtual environment
-source venv/bin/activate
+# Run the model on a sample dataset (2015 only)
+nix run github:sofe4620-ml9/nba-lineup
+
+# Run the model on the full dataset
+nix run github:sofe4620-ml9/nba-lineup#run-full
+
+# Run the test suite
+nix run github:sofe4620-ml9/nba-lineup#test
 ```
 
-### Using Python Virtual Environment
-Alternative setup without Nix:
+These commands will:
+1. Download the repository
+2. Set up all dependencies
+3. Run the model with the appropriate configuration
+4. Output results to a temporary directory
+
+All dependencies are automatically handled by Nix, and binary caching makes subsequent runs much faster.
+
+### One-Click Setup with Nix (Local Development)
+If you want to develop or modify the code, clone the repository and run:
+
+```bash
+# Set up the complete development environment
+nix develop
+```
+
+This single command will:
+1. Create a development shell with all required dependencies
+2. Set up a Python virtual environment (if not already present)
+3. Install all required Python packages
+4. Create necessary output directories
+5. Provide convenient functions to run the model
+
+After running `nix develop`, you can use the following commands:
+- `run_model` - Run the model on a sample dataset (2015 only)
+- `run_model full` - Run the model on the complete dataset
+- `run_test` - Test predictions using a trained model
+
+### Manual Setup (Alternative)
+If you prefer not to use Nix or are on a system without Nix support:
 
 ```bash
 # Create a virtual environment
@@ -53,7 +91,24 @@ venv\Scripts\activate     # On Windows
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Create necessary directories
+mkdir -p output/figures logs
 ```
+
+## Using Binary Caching for Faster Builds
+
+We use Cachix to speed up Nix builds. To configure your system to use our binary cache:
+
+```bash
+# Install Cachix
+nix-env -iA cachix -f https://cachix.org/api/v1/install
+
+# Configure the SOFE4620ML9 cache
+cachix use sofe4620ml9
+```
+
+This will dramatically reduce build times as most dependencies will be downloaded pre-built instead of being compiled locally.
 
 ## Data Processing
 The data processing pipeline includes:
@@ -74,7 +129,7 @@ The model is evaluated on a held-out test set, with metrics including:
 - Impact on team performance
 
 ## Usage
-Run the prediction pipeline:
+Run the prediction pipeline manually:
 
 ```bash
 python src/main.py
