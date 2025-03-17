@@ -127,28 +127,28 @@ Plan:
 [X] Create main script to tie everything together
 [X] Create Jupyter notebook for data exploration
 [X] Set up run script for model training and evaluation
-[ ] Fix environment issues to run the model
+[X] Fix environment issues to run the model
 [ ] Run model on small sample to verify functionality
 [ ] Fine-tune model parameters
 [ ] Run model on full dataset
 [ ] Analyze results
 
-The project structure is now complete:
-- `src/data/data_loader.py`: Loads and preprocesses NBA game data
-- `src/data/feature_engineering.py`: Transforms raw data into features for model training
-- `src/models/lineup_predictor.py`: Predicts the optimal fifth player for a home team
-- `src/visualization/visualizer.py`: Generates plots and charts for data analysis
-- `src/main.py`: Main script that ties everything together
-- `notebooks/exploratory_data_analysis.ipynb`: Jupyter notebook for data exploration
-- `run_model.sh`: Shell script to run the model on the full dataset
+Current Issues:
+1. Nix environment setup issues:
+   - File path resolution error in temporary directory
+   - NumPy import error due to source directory conflict
+   - Virtual environment activation issues
 
-Current progress:
-- We've identified issues with Python package management in the NixOS/WSL environment
-- We've updated the run_model.sh script to use nix-shell for package management instead of virtual environments
-- We're now installing the required packages and running the model on a small dataset (2015 only) to verify functionality
+Next Steps:
+1. Fix the Nix environment setup:
+   - Update the flake.nix to properly handle file paths
+   - Fix the virtual environment setup
+   - Resolve NumPy import issues
+2. Test the model with a small dataset
+3. Fine-tune model parameters if needed
+4. Run the full dataset analysis
 
-Next steps:
-1. Continue with model testing and evaluation once the environment setup is complete
-2. Fine-tune model parameters for optimal performance if needed
-3. Run the model on the full dataset to generate final predictions
-4. Analyze results and create visualizations
+Progress:
+- We've identified the core issues with the Nix environment setup
+- We need to modify the flake.nix to properly handle file paths and dependencies
+- We'll need to ensure proper virtual environment setup and package installation

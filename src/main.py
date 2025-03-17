@@ -13,10 +13,15 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 import joblib
 
-from data.data_loader import NBADataLoader
-from data.feature_engineering import NBAFeatureEngineer
-from models.lineup_predictor import LineupPredictor
-from visualization.visualizer import NBAVisualizer
+try:
+    from tqdm import tqdm
+except ModuleNotFoundError:
+    tqdm = None
+
+from src.data.data_loader import NBADataLoader
+from src.data.feature_engineering import NBAFeatureEngineer
+from src.models.lineup_predictor import LineupPredictor
+from src.visualization.visualizer import NBAVisualizer
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 
 # Setup logging
@@ -34,8 +39,16 @@ def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='NBA Lineup Prediction')
     
-    parser.add_argument('--data-dir', type=str, default='dataset',
-                        help='Directory containing the dataset')
+    # Updated data path argument
+    parser.add_argument('--data-path', type=str, default='data/raw/nba_games.csv',
+                        help='Path to raw data CSV file')
+    
+    # Remove any existing --data-dir arguments
+    # parser.add_argument('--data-dir', ...)  # Delete this if exists
+    
+    # Keep other arguments
+    parser.add_argument('--full', action='store_true',
+                        help='Run on full dataset (2007-2015)')
     parser.add_argument('--output-dir', type=str, default='output',
                         help='Directory to save output files')
     parser.add_argument('--model-type', type=str, default='random_forest',
@@ -51,6 +64,11 @@ def parse_args():
                         help='Generate visualizations')
     parser.add_argument('--predict-only', action='store_true',
                         help='Only perform prediction without training')
+    parser.add_argument('--mode', type=str, default='train',
+                        choices=['train', 'predict'],
+                        help='Mode of operation: train or predict')
+    parser.add_argument('--team', type=str, default=None,
+                        help='Team to calculate player statistics for')
     
     return parser.parse_args()
 
@@ -61,101 +79,96 @@ def main():
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
     
-    # Initialize data loader
-    data_loader = NBADataLoader(data_dir=args.data_dir)
+    # Initialize components with data path
+    loader = NBADataLoader(data_path=args.data_path)  # Changed from data_dir
+    engineer = NBAFeatureEngineer()
     
-    # Initialize feature engineer
-    feature_engineer = NBAFeatureEngineer()
-    
-    # Load training data
-    years = None
-    if args.years:
-        years = args.years.split(',')
-    
-    if not args.predict_only:
-        logger.info("Loading and processing training data...")
-        training_data = data_loader.load_training_data(years=years)
+    # Load and preprocess data
+    training_data = loader.load_training_data(years=args.years if not args.full else list(range(2007, 2016)))
+    processed_data = loader.preprocess_training_data(training_data=training_data)
+    if args.mode == 'train':
+        # Track processing progress
+        players = list(processed_data['home_player_1'].unique()) + \
+                 list(processed_data['away_player_1'].unique())
+        players = list(set(players))
         
-        # Get list of player candidates
-        player_candidates = data_loader.get_player_candidates()
-        
-        # Preprocess training data
-        processed_data = data_loader.preprocess_training_data()
-        
-        # Fit feature engineering transformations
-        feature_engineer.fit(processed_data)
-        
-        # Calculate player statistics
-        player_stats = feature_engineer.calculate_player_statistics(processed_data)
-        
-        # Transform data for model training
-        X, y = feature_engineer.transform_training_data(processed_data)
-        
-        # Initialize model
-        model = LineupPredictor(model_type=args.model_type)
-        
-        # Set feature engineer, player candidates, and stats
-        model.set_feature_engineer(feature_engineer)
-        model.set_player_candidates(player_candidates)
-        model.set_player_stats(player_stats)
-        
-        # Load model if specified, otherwise train
-        if args.load_model:
-            logger.info(f"Loading model from {args.load_model}...")
-            model.load(args.load_model)
+        if tqdm is not None:
+            with tqdm(total=len(players), desc="Processing players") as pbar:
+                player_stats = {}
+                for player in players:
+                    player_stats[player] = engineer.calculate_player_statistics(
+                        player, team=args.team, df=processed_data
+                    )
+                    pbar.update(1)
         else:
-            logger.info("Training model...")
-            model.train(X, y)
-            
-            # Save model if specified
-            if args.save_model:
-                model_path = os.path.join(args.output_dir, f"{args.model_type}_model.pkl")
-                model.save(model_path)
-                
-                # Also save player statistics separately
-                stats_path = os.path.join(args.output_dir, "player_stats.pkl")
-                joblib.dump(player_stats, stats_path)
-                logger.info(f"Saved player statistics to {stats_path}")
+            player_stats = {}
+            for player in players:
+                player_stats[player] = engineer.calculate_player_statistics(
+                    player, team=args.team, df=processed_data
+                )
     else:
-        # For prediction only, we need to load the model and set up feature engineering
-        if not args.load_model:
-            raise ValueError("Must specify --load-model when using --predict-only")
+        # Get home team from the first available game
+        home_team = processed_data.iloc[0]['home_team']
         
-        logger.info("Setting up for prediction only...")
+        # Filter home team players
+        home_team_players = processed_data[processed_data['home_team'] == home_team][
+            ['home_player_1', 'home_player_2', 'home_player_3', 'home_player_4', 'home_player_5']
+        ]
         
-        # Load a minimal amount of training data to extract player candidates
-        training_sample = data_loader.load_training_data(years=['2015'])
+        # Remove any placeholder values
+        home_team_players = home_team_players.values.flatten()
+        home_team_players = [p for p in home_team_players if p not in ('?', None)]
         
-        # Get list of player candidates
-        player_candidates = data_loader.get_player_candidates()
-        logger.info(f"Found {len(player_candidates)} player candidates")
-        
-        # Get statistics for these players
-        stats_path = os.path.join(os.path.dirname(args.load_model), "player_stats.pkl")
-        if os.path.exists(stats_path):
-            logger.info(f"Loading player statistics from {stats_path}")
-            player_stats = joblib.load(stats_path)
+        if home_team_players:
+            player_stats = {}
+            for player in home_team_players:
+                player_stats[player] = engineer.calculate_player_statistics(
+                    player=player,
+                    team=home_team,
+                    df=processed_data
+                )
         else:
-            logger.info("Calculating player statistics from sample data")
-            processed_sample = data_loader.preprocess_training_data()
-            feature_engineer.fit(processed_sample)
-            player_stats = feature_engineer.calculate_player_statistics(processed_sample)
-        
-        # Initialize model and set player candidates and stats
-        model = LineupPredictor(model_type=args.model_type)
-        model.load(args.load_model)
-        model.set_feature_engineer(feature_engineer)
-        model.set_player_candidates(player_candidates)
-        model.set_player_stats(player_stats)
+            player_stats = {}
     
+    # Fit feature engineering transformations
+    engineer.fit(processed_data)
+    
+    # Transform data for model training
+    X, y = engineer.transform_training_data(processed_data)
+    
+    # Initialize model
+    model = LineupPredictor(model_type=args.model_type)
+    
+    # Set feature engineer, player candidates, and stats
+    model.set_feature_engineer(engineer)
+    model.set_player_candidates(loader.get_player_candidates())
+    model.set_player_stats(player_stats)
+    
+    # Load model if specified, otherwise train
+    if args.load_model:
+        logger.info(f"Loading model from {args.load_model}...")
+        model.load(args.load_model)
+    else:
+        logger.info("Training model...")
+        model.train(X, y)
+        
+        # Save model if specified
+        if args.save_model:
+            model_path = os.path.join(args.output_dir, f"{args.model_type}_model.pkl")
+            model.save(model_path)
+            
+            # Also save player statistics separately
+            stats_path = os.path.join(args.output_dir, "player_stats.pkl")
+            joblib.dump(player_stats, stats_path)
+            logger.info(f"Saved player statistics to {stats_path}")
     # Load test data
     logger.info("Loading test data...")
-    test_data, test_labels = data_loader.load_test_data()
+    test_data, test_labels = loader.load_test_data()
     logger.info(f"Test data has {len(test_data.columns)} columns: {list(test_data.columns)}")
     
     # Preprocess test data
     logger.info("Preprocessing test data...")
-    processed_test = data_loader.preprocess_test_data()
+    processed_test = loader.preprocess_test_data(test_data)
     
     # Check if test data has the same structure as training data would have
     # If not, use the stats-only prediction method

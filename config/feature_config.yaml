@@ -1,0 +1,15 @@
+---
+# feature_config.yaml
+scale_features: true
+target_player: home_player_5
+numeric_features:
+  - pts_home
+  - pts_visitor
+  - reb_home
+  - reb_visitor
+  - ast_home
+  - ast_visitor
+categorical_features:
+  - home_team
+  - away_team
+

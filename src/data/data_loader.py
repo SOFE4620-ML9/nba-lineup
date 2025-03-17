@@ -16,31 +16,34 @@ logging.basicConfig(
 )
 logger = logging.getLogger('nba_data_loader')
 
+# Column mappings to match actual data columns
+COLUMN_MAPPING = {
+    'game': 'game_id',
+    'pts_home': 'home_score', 
+    'pts_visitor': 'visitor_score',
+    # Player columns are embedded in lineup data rather than a single column
+}
+
 class NBADataLoader:
     """
     Class responsible for loading and preprocessing NBA game data.
     
     Attributes:
-        data_dir (str): Directory containing the dataset
-        allowed_features (list): List of features allowed for model training
+        data_path (str): Path to the raw NBA game data CSV file
+        _player_candidates (list): List of player candidates
+        logger (Logger): Logger for the data loader
     """
     
-    def __init__(self, data_dir='dataset', allowed_features=None):
+    def __init__(self, data_path='data/raw/nba_games.csv'):  # Changed from data_dir
         """
         Initialize the data loader.
         
         Args:
-            data_dir (str): Path to the data directory
-            allowed_features (list): List of allowed features for the model
+            data_path (str): Path to the raw NBA game data CSV file
         """
-        self.data_dir = data_dir
-        self.training_dir = os.path.join(data_dir, 'training')
-        self.eval_dir = os.path.join(data_dir, 'eval')
-        self.allowed_features = allowed_features
-        self.training_data = None
-        self.test_data = None
-        self.test_labels = None
-        
+        self.data_path = data_path
+        self._player_candidates = None
+        self.logger = logging.getLogger('nba_data_loader')
     def load_training_data(self, years=None):
         """
         Load training data for specified years.
@@ -76,6 +79,12 @@ class NBADataLoader:
         self.training_data = pd.concat(dataframes, ignore_index=True)
         logger.info(f"Loaded {len(self.training_data)} training samples")
         
+        # Validate the loaded training data
+        self.validate_data(self.training_data)
+        
+        # Preprocess the training data
+        self.training_data = self.preprocess_data(self.training_data)
+        
         return self.training_data
     
     def load_test_data(self):
@@ -98,48 +107,86 @@ class NBADataLoader:
         
         logger.info(f"Loaded {len(self.test_data)} test samples")
         
+        # Validate the loaded test data
+        self.validate_data(self.test_data)
+        
+        # Preprocess the test data
+        self.test_data = self.preprocess_data(self.test_data)
+        
         return self.test_data, self.test_labels
     
-    def preprocess_training_data(self):
-        """
-        Preprocess the training data for model training.
+    def validate_data(self, df):
+        required = ['game', 'season', 'home_team', 'away_team', 
+                    'pts_home', 'pts_visitor', 'outcome']
+        missing = [col for col in required if col not in df.columns]
+        if missing:
+            raise ValueError(f"Missing required columns: {missing}")
+    
+    def preprocess_data(self, df):
+        # Check for different column naming conventions
+        if 'home_lineup' in df.columns:
+            # Handle comma-separated lineup format
+            logger.info("Splitting lineup strings into individual player columns")
+            df[['home_player_1', 'home_player_2', 'home_player_3', 'home_player_4', 'home_player_5']] = (
+                df['home_lineup'].str.split(',', expand=True)
+            )
+            df[['away_player_1', 'away_player_2', 'away_player_3', 'away_player_4', 'away_player_5']] = (
+                df['away_lineup'].str.split(',', expand=True)
+            )
+        elif 'home_0' in df.columns:  # Handle numeric index format
+            logger.info("Renaming numeric player columns to positional names")
+            column_mapping = {
+                f'home_{i}': f'home_player_{i+1}' 
+                for i in range(5)
+            }
+            column_mapping.update({
+                f'away_{i}': f'away_player_{i+1}' 
+                for i in range(5)
+            })
+            df = df.rename(columns=column_mapping)
         
-        Returns:
-            pd.DataFrame: Preprocessed training data
-        """
-        if self.training_data is None:
-            raise ValueError("Training data must be loaded before preprocessing")
+        # Now create combined players list
+        home_players = df[[f'home_player_{i}' for i in range(1,6)]].values.tolist()
+        away_players = df[[f'away_player_{i}' for i in range(1,6)]].values.tolist()
         
-        logger.info("Preprocessing training data...")
-        
-        # Create a copy to avoid modifying the original
-        df = self.training_data.copy()
-        
-        # Handle missing values
-        df = self._handle_missing_values(df)
-        
-        # Filter by allowed features if specified
-        if self.allowed_features:
-            df = self._filter_allowed_features(df)
-        
-        logger.info("Training data preprocessing complete")
-        
+        df['players'] = [h + a for h, a in zip(home_players, away_players)]
         return df
     
-    def preprocess_test_data(self):
+    def preprocess_training_data(self, training_data):
+        # Extract player features
+        player_features_df = self._extract_player_features(training_data)
+        
+        # Merge player features with the original dataframe
+        training_data = pd.concat([training_data.reset_index(drop=True), player_features_df.reset_index(drop=True)], axis=1)
+        
+        # Add missing score columns if needed
+        if COLUMN_MAPPING['pts_home'] not in training_data.columns and 'pts_home' in training_data.columns:
+            training_data = training_data.rename(columns={
+                'pts_home': COLUMN_MAPPING['pts_home'],
+                'pts_away': COLUMN_MAPPING['pts_visitor']
+            })
+        
+        # Add debug logging
+        logging.info(f"Columns after preprocessing: {training_data.columns.tolist()}")
+        return training_data
+    
+    def preprocess_test_data(self, test_data):
         """
         Preprocess the test data for prediction.
+        
+        Args:
+            test_data (pd.DataFrame): The test data to preprocess
         
         Returns:
             pd.DataFrame: Preprocessed test data
         """
-        if self.test_data is None:
-            raise ValueError("Test data must be loaded before preprocessing")
+        if test_data is None:
+            raise ValueError("Test data must be provided for preprocessing")
         
         logger.info("Preprocessing test data...")
         
         # Create a copy to avoid modifying the original
-        df = self.test_data.copy()
+        df = test_data.copy()
         
         # Handle missing values
         df = self._handle_missing_values(df)
@@ -209,7 +256,67 @@ class NBADataLoader:
         
         logger.info(f"Keeping {len(allowed_columns)} features out of {len(all_columns)} total columns")
         
+        # Validate required columns
+        required_columns = [f'home_{i}' for i in range(5)] + [f'away_{i}' for i in range(5)]
+        if not all(col in df.columns for col in required_columns):
+            raise ValueError("Missing required player position columns after preprocessing")
+        
         return df[allowed_columns]
+    
+    def _extract_player_features(self, df):
+        # Create empty container for player features
+        player_features = []
+        
+        # Process each player in the lineup
+        for players in df['players']:
+            # Ensure we have exactly 10 players (5 from each team)
+            if len(players) != 10:
+                raise ValueError(f"Invalid number of players in lineup: {len(players)}")
+                
+            # Split into home and away players
+            home_players = players[:5]
+            away_players = players[5:]
+            
+            # Calculate features for each player group
+            home_features = self._calculate_group_features(home_players, 'home')
+            away_features = self._calculate_group_features(away_players, 'away')
+            
+            player_features.append({**home_features, **away_features})
+            
+        return pd.DataFrame(player_features)
+    
+    def _calculate_group_features(self, players, prefix):
+        features = {}
+        valid_players = [p for p in players if p != '?']  # Filter out missing players
+        
+        # Handle case where all players are missing
+        if not valid_players:
+            return {
+                f'{prefix}_avg_height': 0,
+                f'{prefix}_avg_weight': 0,
+                f'{prefix}_total_points': 0
+            }
+        
+        # Add missing players with default stats
+        for p in valid_players:
+            if p not in self.player_stats:
+                self.player_stats[p] = {
+                    'height': 200,  # Default average height in cm
+                    'weight': 100,   # Default average weight in kg
+                    'points': 10     # Default average points
+                }
+                logger.warning(f"Using default stats for missing player: {p}")
+
+        # Calculate features with fallback values
+        try:
+            features[f'{prefix}_avg_height'] = np.mean([self.player_stats[p].get('height', 200) for p in valid_players])
+            features[f'{prefix}_avg_weight'] = np.mean([self.player_stats[p].get('weight', 100) for p in valid_players])
+            features[f'{prefix}_total_points'] = np.sum([self.player_stats[p].get('points', 10) for p in valid_players])
+        except KeyError as e:
+            logger.error(f"Missing stats for player {e} even after fallback")
+            raise
+        
+        return features
     
     def get_player_candidates(self, season=None):
         """
@@ -230,22 +337,11 @@ class NBADataLoader:
         if season:
             df = df[df['season'] == season]
         
-        # Get all home team players
-        home_players = []
-        for i in range(5):
-            col = f'home_{i}'
-            if col in df.columns:
-                home_players.extend(df[col].dropna().unique())
+        # Get all players from the 'players' column
+        all_players = set()
+        for players in df['players']:
+            all_players.update(players)
         
-        # Get all away team players
-        away_players = []
-        for i in range(5):
-            col = f'away_{i}'
-            if col in df.columns:
-                away_players.extend(df[col].dropna().unique())
-        
-        # Combine and get unique players
-        all_players = list(set(home_players) | set(away_players))
         all_players = [p for p in all_players if p != '?']
         
         logger.info(f"Found {len(all_players)} unique players")

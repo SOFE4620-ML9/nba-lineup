@@ -3,10 +3,12 @@ Feature engineering module for NBA lineup prediction project.
 This module handles the transformation of raw data into features for model training.
 """
 
+from collections import defaultdict  # Add this import at the top
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 import logging
+import yaml  # Add import for yaml
 
 # Setup logging
 logging.basicConfig(
@@ -25,14 +27,44 @@ class NBAFeatureEngineer:
         scaler (StandardScaler): Scaler for numerical features
     """
     
-    def __init__(self):
-        """Initialize the feature engineer with encoders and transformers."""
+    def __init__(self, config_path='config/feature_config.yaml'):
+        self.config = self._load_config(config_path)
+        self.scaler = StandardScaler() if self.config.get('scale_features') else None
+        self.logger = logging.getLogger('nba_feature_engineering')
+        self.logger.addHandler(logging.NullHandler())  # Avoid duplicate logs
+        self._debug_counter = 0  # Track processed players
         self.player_encoder = None
         self.team_encoder = None
-        self.scaler = StandardScaler()
         self.player_stats_cache = {}
         self.team_stats_cache = {}
+        self.position_mapping = {
+            'PG': 0,  # Point Guard
+            'SG': 1,  # Shooting Guard
+            'SF': 2,  # Small Forward
+            'PF': 3,  # Power Forward
+            'C': 4    # Center
+        }
         
+    def _load_config(self, config_path):
+        try:
+            with open(config_path, 'r') as file:
+                config = yaml.safe_load(file)
+        except FileNotFoundError:
+            self.logger.warning(f"Config file {config_path} not found, using defaults")
+            config = {
+                'scale_features': True,
+                'target_player': 'home_player_5',
+                'numeric_features': [
+                    'pts_home', 'pts_visitor',
+                    'reb_home', 'reb_visitor',
+                    'ast_home', 'ast_visitor'
+                ],
+                'categorical_features': [
+                    'home_team', 'away_team'
+                ]
+            }
+        return config
+
     def fit(self, df):
         """
         Fit the feature engineering transformations on training data.
@@ -65,34 +97,127 @@ class NBAFeatureEngineer:
         
         logger.info("Feature engineering transformations fitted successfully")
         
-    def transform_training_data(self, df):
+    def transform(self, df):
         """
-        Transform training data into features for model training.
+        Transform the input data into features for model training.
         
         Args:
-            df (pd.DataFrame): Training data to transform
+            df (pd.DataFrame): Input data to transform
             
         Returns:
-            tuple: (X, y) where X is the feature matrix and y is the target vector
+            pd.DataFrame: Transformed features
+        """
+        logger.info("Transforming input data...")
+        
+        # Store the dataframe for player statistics calculation
+        self.df = df
+        
+        # Initialize feature arrays
+        features = []
+        
+        # Process each game
+        for _, row in df.iterrows():
+            # Get home team lineup (first 4 players)
+            home_lineup = []
+            for i in range(4):  # We only want the first 4 players
+                col = f'home_{i}'
+                if col in row and row[col] != '?' and not pd.isna(row[col]):
+                    home_lineup.append(row[col])
+            
+            # Skip if we don't have enough players
+            if len(home_lineup) < 4:
+                logger.warning(f"Skipping game due to insufficient home lineup: {row.get('game_id', 'unknown')}")
+                continue
+            
+            # Get team
+            home_team = row.get('home_team')
+            if not home_team:
+                logger.warning(f"Skipping game due to missing home team: {row.get('game_id', 'unknown')}")
+                continue
+            
+            # Extract lineup features
+            game_features = self.extract_lineup_features(home_lineup, home_team)
+            
+            # Add game context features if available
+            if 'game_date' in row:
+                game_features['days_rest'] = row.get('days_rest_home', 0)
+                game_features['is_back_to_back'] = 1 if row.get('days_rest_home', 0) == 0 else 0
+                game_features['is_home_game'] = 1  # Always 1 for home team
+            
+            # Add team performance features if available
+            if 'home_team_win_pct' in row:
+                game_features['team_win_pct'] = row['home_team_win_pct']
+            
+            # Add opponent features if available
+            if 'away_team' in row:
+                away_team = row['away_team']
+                game_features['opponent_win_pct'] = row.get('away_team_win_pct', 0.5)
+                
+                # Get opponent lineup
+                away_lineup = []
+                for i in range(5):
+                    col = f'away_{i}'
+                    if col in row and row[col] != '?' and not pd.isna(row[col]):
+                        away_lineup.append(row[col])
+                
+                if away_lineup:
+                    # Calculate opponent lineup strength
+                    opp_features = self.extract_lineup_features(away_lineup, away_team)
+                    for key, value in opp_features.items():
+                        game_features[f'opp_{key}'] = value
+            
+            features.append(game_features)
+        
+        # Convert to DataFrame
+        feature_df = pd.DataFrame(features)
+        
+        # Fill missing values
+        feature_df = feature_df.fillna(0)
+        
+        # Scale numerical features
+        numerical_cols = feature_df.select_dtypes(include=['float64', 'int64']).columns
+        if len(numerical_cols) > 0:
+            feature_df[numerical_cols] = self.scaler.fit_transform(feature_df[numerical_cols])
+        
+        logger.info(f"Transformed data shape: {feature_df.shape}")
+        return feature_df
+    
+    def transform_training_data(self, df):
+        """
+        Transform training data and extract labels.
+        
+        Args:
+            df (pd.DataFrame): Training data
+            
+        Returns:
+            tuple: (X, y) where X is features and y is labels
         """
         logger.info("Transforming training data...")
         
         # Extract features
-        X = self._extract_features(df)
+        X = self.transform(df)
         
-        # Extract target (outcome)
-        y = df['outcome'].values if 'outcome' in df.columns else None
+        # Extract labels (actual fifth player)
+        y = []
+        for _, row in df.iterrows():
+            fifth_player = row.get('home_player_5', '?')  # Changed from 'home_4'
+            if fifth_player != '?' and not pd.isna(fifth_player):
+                y.append(fifth_player)
         
-        logger.info(f"Transformed training data shape: {X.shape}")
+        # Remove rows where label is missing
+        valid_mask = [y_i is not None for y_i in y]
+        X = X[valid_mask]
+        y = [y_i for i, y_i in enumerate(y) if valid_mask[i]]
         
+        logger.info(f"Transformed training data shape: X={X.shape}, y={len(y)}")
         return X, y
     
     def transform_test_data(self, df):
         """
-        Transform test data into features for prediction.
+        Transform test data.
         
         Args:
-            df (pd.DataFrame): Test data to transform
+            df (pd.DataFrame): Test data
             
         Returns:
             pd.DataFrame: Transformed features
@@ -100,10 +225,9 @@ class NBAFeatureEngineer:
         logger.info("Transforming test data...")
         
         # Extract features
-        X = self._extract_features(df)
+        X = self.transform(df)
         
         logger.info(f"Transformed test data shape: {X.shape}")
-        
         return X
     
     def _extract_features(self, df):
@@ -171,45 +295,16 @@ class NBAFeatureEngineer:
         Returns:
             pd.DataFrame: Player features
         """
-        # Get player columns (excluding the missing player in test data)
-        home_player_cols = [col for col in df.columns if col.startswith('home_') and col != 'home_team']
-        away_player_cols = [col for col in df.columns if col.startswith('away_') and col != 'away_team']
+        features = []
+        for players in df['players']:
+            # Filter out placeholder '?' values
+            valid_players = [p for p in players if p != '?']
+            
+            # Calculate features for valid players
+            player_stats = [self.player_stats.get(p, {}) for p in valid_players]
+            # ... rest of feature calculation logic ...
         
-        # Create empty feature matrix
-        all_player_features = []
-        
-        # Process home team players
-        for col in home_player_cols:
-            # Skip missing players (marked with '?')
-            players = df[col].replace('?', np.nan).dropna()
-            if players.empty:
-                continue
-                
-            # Encode players
-            players_encoded = self._encode_players(players)
-            players_encoded.columns = [f'{col}_{i}' for i in range(players_encoded.shape[1])]
-            all_player_features.append(players_encoded)
-        
-        # Process away team players
-        for col in away_player_cols:
-            players = df[col].replace('?', np.nan).dropna()
-            if players.empty:
-                continue
-                
-            # Encode players
-            players_encoded = self._encode_players(players)
-            players_encoded.columns = [f'{col}_{i}' for i in range(players_encoded.shape[1])]
-            all_player_features.append(players_encoded)
-        
-        # Concatenate all player features
-        if all_player_features:
-            player_features = pd.concat(all_player_features, axis=1)
-            player_features.index = df.index
-        else:
-            # Create empty dataframe if no player features
-            player_features = pd.DataFrame(index=df.index)
-        
-        return player_features
+        return pd.DataFrame(features)
     
     def _encode_players(self, players):
         """
@@ -288,129 +383,172 @@ class NBAFeatureEngineer:
         
         return game_features
     
-    def calculate_player_statistics(self, df):
+    def calculate_player_statistics(self, player, team, df):
+        try:
+            self._debug_counter += 1
+            if self._debug_counter % 100 == 0:
+                self.logger.debug(f"Processed {self._debug_counter} players...")
+            
+            # Optimized player presence check using vectorized operations
+            home_players = df[[f'home_player_{i}' for i in range(1,6)]]
+            away_players = df[[f'away_player_{i}' for i in range(1,6)]]
+            
+            # Create boolean masks using numpy for faster computation
+            home_mask = (df['home_team'] == team) & (home_players == player).any(axis=1)
+            away_mask = (df['away_team'] == team) & (away_players == player).any(axis=1)
+            
+            player_games = df[home_mask | away_mask].copy()
+            
+            # Convert categorical columns to reduce memory usage
+            categorical_cols = ['home_team', 'away_team'] + \
+                              [f'{loc}_player_{i}' for loc in ['home', 'away'] for i in range(1,6)]
+            for col in categorical_cols:
+                if col in player_games.columns:
+                    player_games[col] = player_games[col].astype('category')
+
+            # Calculate basic stats using correct column names
+            stats = defaultdict(float)
+            if not player_games.empty:
+                # Use vectorized operations instead of slow apply/lambda
+                home_mask = (player_games['home_team'] == team)
+                away_mask = (player_games['away_team'] == team)
+                
+                # Points calculation
+                stats['total_points'] = player_games.loc[home_mask, 'home_score'].sum() + \
+                                      player_games.loc[away_mask, 'pts_visitor'].sum()
+                
+                # Other stats using correct column names
+                stats['assists'] = player_games.loc[home_mask, 'ast_home'].sum() + \
+                                 player_games.loc[away_mask, 'ast_visitor'].sum()
+                                 
+                stats['rebounds'] = player_games.loc[home_mask, 'reb_home'].sum() + \
+                                  player_games.loc[away_mask, 'reb_visitor'].sum()
+                
+                stats['blocks'] = player_games.loc[home_mask, 'blk_home'].sum() + \
+                                player_games.loc[away_mask, 'blk_visitor'].sum()
+                
+                # Calculate percentages using safe division
+                total_games = len(player_games)
+                stats['win_rate'] = (player_games['outcome'] == 1).sum() / total_games if total_games > 0 else 0
+                
+                # Convert defaultdict to regular dict to avoid serialization issues
+                return dict(stats)
+            
+        except Exception as e:
+            logger.error(f"Error calculating stats for {player}: {str(e)}")
+            return defaultdict(float)  # Return default values
+
+    def calculate_team_compatibility(self, lineup, team):
         """
-        Calculate statistics for each player based on historical performance.
+        Calculate compatibility score for a given lineup with a team.
         
         Args:
-            df (pd.DataFrame): Training data with player performance
+            lineup (list): List of player names
+            team (str): Team name
             
         Returns:
-            dict: Dictionary mapping player names to their statistics
+            float: Compatibility score between 0 and 1
         """
-        logger.info("Calculating player statistics...")
+        if not lineup:
+            return 0.0
         
-        # Initialize player stats dictionary
-        player_stats = {}
+        # Calculate position balance
+        positions = []
+        for player in lineup:
+            stats = self.player_stats.get(player, {})
+            positions.append(stats.get('primary_position', 'Unknown'))
         
-        # Get player columns
-        player_cols = [col for col in df.columns if col.startswith('home_') or col.startswith('away_')]
-        player_cols = [col for col in player_cols if col != 'home_team' and col != 'away_team']
+        unique_positions = len(set(positions))
+        position_balance = unique_positions / 5  # Normalize by max possible positions
         
-        # Get all unique players
-        all_players = set()
-        for col in player_cols:
-            all_players.update(df[col].dropna().unique())
-        all_players.discard('?')
+        # Calculate team chemistry
+        chemistry_scores = []
+        for player in lineup:
+            stats = self.player_stats.get(player, {})
+            chemistry_scores.append(stats.get('team_chemistry', 0.0))
+        team_chemistry = np.mean(chemistry_scores)
         
-        # Initialize stats for each player
-        for player in all_players:
-            player_stats[player] = {
-                'total_games': 0,
-                'wins': 0,
-                'points_contribution': 0,
-                'rebounds_contribution': 0,
-                'assists_contribution': 0,
-            }
+        # Calculate experience balance
+        experience_scores = []
+        for player in lineup:
+            stats = self.player_stats.get(player, {})
+            experience_scores.append(stats.get('total_games', 0))
+        experience_std = np.std(experience_scores)
+        experience_balance = 1 / (1 + experience_std)  # Lower std = higher balance
         
-        # Calculate statistics for each player
-        for _, row in df.iterrows():
-            # Process home team players
-            home_outcome = 1 if row.get('outcome', 0) == 1 else 0
-            home_points = row.get('pts_home', 0)
-            home_rebounds = row.get('reb_home', 0)
-            home_assists = row.get('ast_home', 0)
-            
-            home_players = []
-            for i in range(5):
-                col = f'home_{i}'
-                if col in row and row[col] != '?' and not pd.isna(row[col]):
-                    home_players.append(row[col])
-            
-            # Update home player stats
-            if home_players:
-                for player in home_players:
-                    if player in player_stats:
-                        player_stats[player]['total_games'] += 1
-                        player_stats[player]['wins'] += home_outcome
-                        player_stats[player]['points_contribution'] += home_points / len(home_players)
-                        player_stats[player]['rebounds_contribution'] += home_rebounds / len(home_players)
-                        player_stats[player]['assists_contribution'] += home_assists / len(home_players)
-            
-            # Process away team players
-            away_outcome = 1 if row.get('outcome', 0) == 0 else 0  # Away team wins when outcome is 0
-            away_points = row.get('pts_visitor', 0)
-            away_rebounds = row.get('reb_visitor', 0)
-            away_assists = row.get('ast_visitor', 0)
-            
-            away_players = []
-            for i in range(5):
-                col = f'away_{i}'
-                if col in row and row[col] != '?' and not pd.isna(row[col]):
-                    away_players.append(row[col])
-            
-            # Update away player stats
-            if away_players:
-                for player in away_players:
-                    if player in player_stats:
-                        player_stats[player]['total_games'] += 1
-                        player_stats[player]['wins'] += away_outcome
-                        player_stats[player]['points_contribution'] += away_points / len(away_players)
-                        player_stats[player]['rebounds_contribution'] += away_rebounds / len(away_players)
-                        player_stats[player]['assists_contribution'] += away_assists / len(away_players)
+        # Calculate skill complementarity
+        scoring_scores = []
+        playmaking_scores = []
+        defense_scores = []
+        rebounding_scores = []
         
-        # Calculate averages
-        for player in player_stats:
-            games = player_stats[player]['total_games']
-            if games > 0:
-                player_stats[player]['win_rate'] = player_stats[player]['wins'] / games
-                player_stats[player]['avg_points'] = player_stats[player]['points_contribution'] / games
-                player_stats[player]['avg_rebounds'] = player_stats[player]['rebounds_contribution'] / games
-                player_stats[player]['avg_assists'] = player_stats[player]['assists_contribution'] / games
-            else:
-                player_stats[player]['win_rate'] = 0
-                player_stats[player]['avg_points'] = 0
-                player_stats[player]['avg_rebounds'] = 0
-                player_stats[player]['avg_assists'] = 0
+        for player in lineup:
+            stats = self.player_stats.get(player, {})
+            scoring_scores.append(stats.get('points_per_game', 0.0))
+            playmaking_scores.append(stats.get('assists_per_game', 0.0))
+            defense_scores.append((stats.get('steals_per_game', 0.0) + stats.get('blocks_per_game', 0.0)) / 2)
+            rebounding_scores.append(stats.get('rebounds_per_game', 0.0))
         
-        # Cache player statistics
-        self.player_stats_cache = player_stats
+        # Calculate skill diversity
+        skill_diversity = (
+            np.std(scoring_scores) +
+            np.std(playmaking_scores) +
+            np.std(defense_scores) +
+            np.std(rebounding_scores)
+        ) / 4
         
-        logger.info(f"Calculated statistics for {len(player_stats)} players")
+        # Combine all factors with weights
+        weights = {
+            'position_balance': 0.3,
+            'team_chemistry': 0.2,
+            'experience_balance': 0.2,
+            'skill_diversity': 0.3
+        }
         
-        return player_stats
-    
-    def get_player_statistics(self, player_name):
+        compatibility_score = (
+            weights['position_balance'] * position_balance +
+            weights['team_chemistry'] * team_chemistry +
+            weights['experience_balance'] * experience_balance +
+            weights['skill_diversity'] * (1 - skill_diversity)  # Lower diversity = higher complementarity
+        )
+        
+        return compatibility_score
+
+    def extract_lineup_features(self, lineup, team):
         """
-        Get statistics for a specific player.
+        Extract features for a given lineup and team.
         
         Args:
-            player_name (str): Name of the player
+            lineup (list): List of player names
+            team (str): Team name
             
         Returns:
-            dict: Dictionary of player statistics
+            dict: Lineup features
         """
-        if not self.player_stats_cache:
-            raise ValueError("Player statistics must be calculated before retrieval")
+        total_points = 0.0
+        total_rebounds = 0.0
+        total_assists = 0.0
         
-        return self.player_stats_cache.get(player_name, {
-            'total_games': 0,
-            'wins': 0,
-            'win_rate': 0,
-            'avg_points': 0,
-            'avg_rebounds': 0,
-            'avg_assists': 0,
+        for player in lineup:
+            stats = self.player_stats.get(player, {})
+            # Use get() with default values
+            total_points += stats.get('points_per_game', 0.0)
+            total_rebounds += stats.get('rebounds_per_game', 0.0) 
+            total_assists += stats.get('assists_per_game', 0.0)
+        
+        # Add fallback for missing team stats
+        team_stats = self.team_stats.get(team, {
+            'avg_points': 0.0,
+            'avg_rebounds': 0.0,
+            'win_rate': 0.0
         })
+        
+        return {
+            'total_lineup_points': total_points,
+            'total_lineup_rebounds': total_rebounds,
+            'team_win_rate': team_stats['win_rate'],
+            # ... other features ...
+        }
 
 if __name__ == "__main__":
     # Example usage with dummy data
