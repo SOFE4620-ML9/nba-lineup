@@ -54,6 +54,7 @@
               pandas numpy scikit-learn matplotlib seaborn jupyter scipy openpyxl
             ]);
           in "${pkgs.writeShellScriptBin "run-full" ''
+            export PYTHONPATH="${projectDir}/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
             ${pythonEnv}/bin/python ${projectDir}/src/main.py \
               --data-dir dataset \
               --output-dir output \
