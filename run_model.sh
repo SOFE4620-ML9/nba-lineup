@@ -1,15 +1,14 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Set up debugging
 set -x  # Print each command before executing
 set -e  # Exit immediately if a command exits with a non-zero status
 
+# Add pre-run validation
+python -c "from src.data.validation import validate_features; validate_features()"
+
 # Create logs directory
 mkdir -p logs
-
-# Install required packages directly using Nix
-echo "Installing required packages with Nix..."
-nix-shell -p "python312.withPackages(ps: with ps; [ pandas numpy scikit-learn matplotlib seaborn jupyter scipy openpyxl ])" --run "python --version"
 
 # Create output directories
 mkdir -p output/figures
@@ -21,6 +20,15 @@ MPLBACKEND=Agg nix-shell -p "python312.withPackages(ps: with ps; [ pandas numpy 
 # Run prediction using the trained model on just the test data
 echo "Testing prediction on test data..."
 MPLBACKEND=Agg nix-shell -p "python312.withPackages(ps: with ps; [ pandas numpy scikit-learn matplotlib seaborn jupyter scipy openpyxl ])" --run "python src/main.py --data-dir dataset --output-dir output --model-type random_forest --load-model output/random_forest_model.pkl --predict-only --visualize" 2>&1 | tee logs/prediction_run_$(date +%Y%m%d_%H%M%S).log
+
+# Post-run checks
+if [ -f "output/predictions.csv" ]; then
+    echo "Validation: Predictions generated successfully"
+    python src/report/validation.py --input output/predictions.csv
+else
+    echo "Error: Predictions file not found!" >&2
+    exit 1
+fi
 
 # Print the unique values from the predictions.csv file
 echo "Unique players in predictions.csv:"

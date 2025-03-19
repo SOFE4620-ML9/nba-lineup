@@ -53,6 +53,17 @@
             fi
           '';
         };
+
+        report-generator = pkgs.stdenv.mkDerivation {
+          name = "nba-report-generator";
+          buildInputs = [ self.packages.${system}.pythonEnv ];
+          src = ./.;
+          installPhase = ''
+            mkdir -p $out/bin
+            echo "${pkgs.python3}/bin/python src/report/generator.py \$@" > $out/bin/generate-report
+            chmod +x $out/bin/generate-report
+          '';
+        };
       };
 
       apps.${system} = {
@@ -76,6 +87,11 @@
         test = {
           type = "app";
           program = "${testScript}/bin/nba-test";
+        };
+
+        report = utils.lib.mkApp {
+          drv = self.packages.${system}.report-generator;
+          exePath = "/bin/generate-report";
         };
       };
     };
