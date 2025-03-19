@@ -14,7 +14,7 @@ import logging
 import joblib
 import os
 import random
-from data.data_loader import load_preprocessed_data  # Instead of 'from src.data...'
+from src.data.data_loader import load_preprocessed_data  # Instead of 'from src.data...'
 
 # Set random seed for reproducibility
 random.seed(42)

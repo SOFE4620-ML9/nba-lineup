@@ -18,65 +18,33 @@
           openpyxl
           pyyaml
         ]);
+        # Create proper app definitions
+        nba-lineup-script = pkgs.writeShellScriptBin "nba-lineup" ''
+          # Use absolute path to project source from Nix store
+          export PYTHONPATH="${self.outPath}/src:${pythonEnv}/${pythonEnv.sitePackages}"
+          ${pythonEnv}/bin/python -m src.main "$@"
+        '';
       in {
+        # Correct dev shell configuration
         devShells.default = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            python312
-            python312Packages.pandas
-            python312Packages.numpy
-            python312Packages.scikit-learn
-            python312Packages.matplotlib
-            python312Packages.seaborn
-            python312Packages.jupyter
-            python312Packages.scipy
-            python312Packages.openpyxl
-            python312Packages.pyyaml
-          ];
-          shellHook = ''
-            export PYTHONPATH="${self}/src:$PYTHONPATH"
-            echo "NBA Lineup Prediction dev shell activated"
-          '';
+          packages = [ pythonEnv ];
         };
 
-        packages.default = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            python312
-            python312Packages.pandas
-            python312Packages.numpy
-            python312Packages.scikit-learn
-            python312Packages.matplotlib
-            python312Packages.seaborn
-            python312Packages.pyyaml
-          ];
-        };
+        # Correct app structure with proper typing
         apps = {
-          x86_64-linux = {
-            default = pkgs.writeShellApplication {
-              name = "nba-lineup";
-              runtimeInputs = [ pythonEnv ];
-              text = ''
-                export PYTHONPATH="${self}/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
-                ${pythonEnv}/bin/python -m src.main \
-                  --data-path "${self}/dataset" \
-                  --output-dir "${self}/output" \
-                  --model-type random_forest \
-                  "$@"
-              '';
-            };
-
-            run-full = pkgs.writeShellApplication {
-              name = "run-full";
-              runtimeInputs = [ pythonEnv ];
-              text = ''
-                export PYTHONPATH="${self}/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
-                ${pythonEnv}/bin/python -m src.main \
-                  --full \
-                  --data-path "${self}/dataset" \
-                  --output-dir "${self}/output" \
-                  --model-type random_forest
-              '';
-            };
+          run-sample = {
+            type = "app";
+            program = "${nba-lineup-script}/bin/nba-lineup";
           };
+          
+          run-full = {
+            type = "app";
+            program = "${nba-lineup-script}/bin/nba-lineup";
+          };
+
+          default = self.apps.${system}.run-sample;
         };
+        
+        packages.default = nba-lineup-script;
       });
-}        
+}
