@@ -1,6 +1,6 @@
 {
   inputs = {
-    Snixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
     #nixpkgs.url = "github:NixOS/nixpkgs/205fd4226592cc83fd4c0885a3e4c9c400efabb5"; # Pinned to working version
     flake-utils.url = "github:numtide/flake-utils";
   };
