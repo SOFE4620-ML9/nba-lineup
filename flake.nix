@@ -53,12 +53,12 @@
           type = "app";
           program = pkgs.writeShellApplication {
             name = "run-model";
-            runtimeInputs = [ pythonEnv ];
+            runtimeInputs = [ pythonEnv self ];
             text = ''
-              export PYTHONPATH="$PWD/src:$PYTHONPATH"
-              ${pythonEnv}/bin/python "$PWD/src/main.py" \
-                --data-dir dataset \
-                --output-dir output \
+              export PYTHONPATH="${self}/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
+              ${pythonEnv}/bin/python -m src.main \
+                --data-dir ${self}/dataset \
+                --output-dir ${self}/output \
                 --model-type random_forest \
                 "$@"
             '';
@@ -67,12 +67,11 @@
         apps.run-full = {
           type = "app";
           program = let
-            pkgs = nixpkgs.legacyPackages.${system};
             script = pkgs.writeShellScriptBin "run-full" ''
-              export PYTHONPATH="$PWD/src:${pythonEnv}/${pythonEnv.sitePackages}"
-              ${pythonEnv}/bin/python "$PWD/src/main.py" \
-                --test-data "$PWD/dataset/evaluation/NBA_test.csv" \
-                --output "$PWD/output/predictions.csv" \
+              export PYTHONPATH="${self}/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
+              ${pythonEnv}/bin/python -m src.main \
+                --test-data "${self}/dataset/evaluation/NBA_test.csv" \
+                --output "${self}/output/predictions.csv" \
                 --debug
             '';
           in "${script}/bin/run-full";
@@ -81,21 +80,18 @@
         apps.test = {
           type = "app";
           program = let
-            pkgs = nixpkgs.legacyPackages.${system};
-            pythonEnv = pkgs.python312.withPackages(ps: with ps; [
-              pandas numpy scikit-learn matplotlib seaborn pyyaml
-            ]);
-          in "${pkgs.writeShellScriptBin "test" ''
-            export PYTHONPATH="$PWD/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
-            ${pythonEnv}/bin/python "$PWD/src/main.py" \
-              --data-dir "$PWD/dataset" \
-              --output-dir "$PWD/output" \
-              --model-type random_forest \
-              --load-model "$PWD/output/random_forest_model" \
-              --visualize \
-              --years 2015 \
-              "$@"
-          ''}/bin/test";
+            script = pkgs.writeShellScriptBin "test" ''
+              export PYTHONPATH="${self}/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
+              ${pythonEnv}/bin/python -m src.main \
+                --data-dir "$PWD/dataset" \
+                --output-dir "$PWD/output" \
+                --model-type random_forest \
+                --load-model "$PWD/output/random_forest_model" \
+                --visualize \
+                --years 2015 \
+                "$@"
+            '';
+          in "${script}/bin/test";
         };
 
         apps.report = {

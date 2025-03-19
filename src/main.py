@@ -18,10 +18,10 @@ try:
 except ModuleNotFoundError:
     tqdm = None
 
-from src.data.data_loader import NBADataLoader
-from src.data.feature_engineering import NBAFeatureEngineer
-from src.models.lineup_predictor import LineupPredictor
-from src.visualization.visualizer import NBAVisualizer
+from data.data_loader import NBADataLoader
+from data.feature_engineering import NBAFeatureEngineer
+from models.lineup_predictor import LineupPredictor
+from visualization.visualizer import NBAVisualizer
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 
 def parse_args():
