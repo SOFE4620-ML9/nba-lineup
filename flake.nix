@@ -49,54 +49,32 @@
             python312Packages.pyyaml
           ];
         };
-        apps.default = {
-          type = "app";
-          program = pkgs.writeShellApplication {
-            name = "run-model";
-            runtimeInputs = [ pythonEnv self ];
+        apps = {
+          x86_64-linux.default = pkgs.writeShellApplication {
+            name = "nba-lineup";
+            runtimeInputs = [ pythonEnv ];
             text = ''
               export PYTHONPATH="${self}/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
               ${pythonEnv}/bin/python -m src.main \
-                --data-dir ${self}/dataset \
-                --output-dir ${self}/output \
+                --data-path "${self}/dataset" \
+                --output-dir "${self}/output" \
                 --model-type random_forest \
                 "$@"
             '';
           };
-        };
-        apps.run-full = {
-          type = "app";
-          program = let
-            script = pkgs.writeShellScriptBin "run-full" ''
+
+          x86_64-linux.run-full = pkgs.writeShellApplication {
+            name = "run-full";
+            runtimeInputs = [ pythonEnv ];
+            text = ''
               export PYTHONPATH="${self}/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
               ${pythonEnv}/bin/python -m src.main \
-                --test-data "${self}/dataset/evaluation/NBA_test.csv" \
-                --output "${self}/output/predictions.csv" \
-                --debug
+                --full \
+                --data-path "${self}/dataset" \
+                --output-dir "${self}/output" \
+                --model-type random_forest
             '';
-          in "${script}/bin/run-full";
-        };
-
-        apps.test = {
-          type = "app";
-          program = let
-            script = pkgs.writeShellScriptBin "test" ''
-              export PYTHONPATH="${self}/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
-              ${pythonEnv}/bin/python -m src.main \
-                --data-dir "$PWD/dataset" \
-                --output-dir "$PWD/output" \
-                --model-type random_forest \
-                --load-model "$PWD/output/random_forest_model" \
-                --visualize \
-                --years 2015 \
-                "$@"
-            '';
-          in "${script}/bin/test";
-        };
-
-        apps.report = {
-          type = "app";
-          program = "${self}/src/report/generator.py";
+          };
         };
       });
 }        
