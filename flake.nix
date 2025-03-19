@@ -41,7 +41,6 @@
             python312Packages.pyyaml
           ];
         };
-
         apps.default = {
           type = "app";
           program = "${projectDir}/run_model.sh";
@@ -49,7 +48,18 @@
 
         apps.run-full = {
           type = "app";
-          program = "${projectDir}/run_model.sh";
+          program = let 
+            pkgs = nixpkgs.legacyPackages.${system};
+            pythonEnv = pkgs.python312.withPackages(ps: with ps; [
+              pandas numpy scikit-learn matplotlib seaborn jupyter scipy openpyxl
+            ]);
+          in "${pkgs.writeShellScriptBin "run-full" ''
+            ${pythonEnv}/bin/python ${projectDir}/src/main.py \
+              --data-dir dataset \
+              --output-dir output \
+              --model-type random_forest \
+              "$@"
+          ''}/bin/run-full";
         };
 
         apps.test = {
