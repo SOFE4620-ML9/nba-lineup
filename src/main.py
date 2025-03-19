@@ -70,6 +70,7 @@ def main():
     # Convert to absolute path early
     args.output_dir = os.path.abspath(args.output_dir)
     os.makedirs(args.output_dir, exist_ok=True)
+    print(f"DEBUG: Writing outputs to {args.output_dir}")  # For verification
     
     # Validate arguments early
     if not os.path.exists(args.data_path):
@@ -229,9 +230,10 @@ def main():
             'Fifth_Player': optimal_players
         })
         
-        predictions_file = os.path.join(args.output_dir, 'predictions.csv')
-        predictions_df.to_csv(predictions_file, index=False)
-        logger.info(f"Saved predictions to {predictions_file}")
+        pred_path = os.path.join(args.output_dir, "predictions.csv")
+        print(f"DEBUG: Saving predictions to {pred_path}")
+        predictions_df.to_csv(pred_path, index=False)
+        logger.info(f"Saved predictions to {pred_path}")
 
     except Exception as e:
         logger.error(f"Critical failure: {str(e)}", exc_info=True)
