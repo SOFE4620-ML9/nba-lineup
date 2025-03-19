@@ -7,64 +7,68 @@
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
-      pythonEnv = pkgs.python311.withPackages (ps: [
-        ps.pandas
-        ps.numpy
-        ps.scikit-learn
-        ps.matplotlib
-        ps.joblib
-        ps.tqdm
-        ps.pyyaml
-        ps.seaborn
-        ps.pytest  # Add pytest here
+      pythonEnv = pkgs.python3.withPackages (ps: with ps; [
+        pandas numpy scikit-learn matplotlib seaborn pytest pyyaml
       ]);
-      
-      # Fix dataset path to match project structure
-      commonArgs = "--data-path ./dataset";  # Changed from ${self}/dataset
-      
+
+      commonArgs = "--data-path ${self}/dataset --years 2015 --output-dir ./output";
+
     in {
+      packages.${system} = {
+        default = pythonEnv;
+        
+        nba-lineup = pkgs.stdenv.mkDerivation {
+          name = "nba-lineup";
+          src = self;
+          buildInputs = [ pythonEnv ];
+          installPhase = ''
+            mkdir -p $out/bin
+            cp -r src $out/
+            ln -s ${pythonEnv}/bin/python $out/bin/nba-python
+          '';
+        };
+
+        nba-lineup-tests = pkgs.stdenv.mkDerivation {
+          name = "nba-lineup-tests";
+          src = self;
+          installPhase = ''
+            mkdir -p $out/tests
+            if [ -d tests ]; then
+              cp -r tests/* $out/tests/
+            fi
+          '';
+        };
+      };
+
       apps.${system} = {
         default = {
           type = "app";
           program = "${pkgs.writeShellScriptBin "nba-lineup" ''
-            #!${pkgs.runtimeShell}
-            export PYTHONPATH=${self}/src:${self}:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH
-            cd ${self}
-            ${pythonEnv}/bin/python -m src.main ${commonArgs} "$@"
+            ${self.packages.${system}.nba-lineup}/bin/nba-python -m src.main \
+              ${commonArgs} --no-visualize "$@"
           ''}/bin/nba-lineup";
         };
 
         run-full = {
           type = "app";
           program = "${pkgs.writeShellScriptBin "nba-lineup-full" ''
-            #!${pkgs.runtimeShell}
-            export PYTHONPATH=${self}/src:${self}:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH
-            cd ${self}
-            ${pythonEnv}/bin/python -m src.main ${commonArgs} --years 2007-2015 "$@"
+            ${self.packages.${system}.nba-lineup}/bin/nba-python -m src.main \
+              --data-path ${self}/dataset --years 2007-2015 \
+              --output-dir ./full-output "$@"
           ''}/bin/nba-lineup-full";
         };
 
         test = {
           type = "app";
-          program = "${pkgs.writeShellScriptBin "nba-lineup-test" ''
-            #!${pkgs.runtimeShell}
-            export PYTHONPATH=${self}/src:${self}:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH
-            cd ${self}
-            ${pythonEnv}/bin/python -m pytest ${self}/tests
-          ''}/bin/nba-lineup-test";
+          program = "${pkgs.writeShellScriptBin "nba-test" ''
+            mkdir -p tests
+            if [ -d ${self.packages.${system}.nba-lineup-tests}/tests ]; then
+              cp -r ${self.packages.${system}.nba-lineup-tests}/tests/* ./tests/
+            fi
+            ${self.packages.${system}.nba-lineup}/bin/nba-python -m pytest \
+              tests/ -vv "$@"
+          ''}/bin/nba-test";
         };
-      };
-
-      devShells.${system}.default = pkgs.mkShell {
-        packages = [ 
-          pythonEnv
-          pkgs.pytest  # Add pytest to dev shell
-        ];
-        shellHook = ''
-          export PYTHONPATH=$PWD/src:$PYTHONPATH
-          echo "NBA Lineup Prediction development shell"
-          echo "Python packages available: pandas, numpy, scikit-learn, matplotlib, pytest"
-        '';
       };
     };
 }

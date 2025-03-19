@@ -63,5 +63,4 @@ venv.bak/
 output/
 figures/
 *.log
-models/
 *.pkl
