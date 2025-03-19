@@ -66,17 +66,16 @@
         };
         apps.run-full = {
           type = "app";
-          program = pkgs.writeShellApplication {
-            name = "run-full";
-            runtimeInputs = [ pythonEnv ];
-            text = ''
-              export PYTHONPATH="${self}/src:$PYTHONPATH"
-              python ${self}/src/main.py \
-                --test-data "${self}/dataset/evaluation/NBA_test.csv" \
-                --output "${self}/output/predictions.csv" \
+          program = let
+            pkgs = nixpkgs.legacyPackages.${system};
+            script = pkgs.writeShellScriptBin "run-full" ''
+              export PYTHONPATH="$PWD/src:${pythonEnv}/${pythonEnv.sitePackages}"
+              ${pythonEnv}/bin/python "$PWD/src/main.py" \
+                --test-data "$PWD/dataset/evaluation/NBA_test.csv" \
+                --output "$PWD/output/predictions.csv" \
                 --debug
             '';
-          };
+          in "${script}/bin/run-full";
         };
 
         apps.test = {
