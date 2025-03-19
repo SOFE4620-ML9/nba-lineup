@@ -14,7 +14,7 @@ The dataset contains lineups of all NBA games from 2007 to 2015, including:
 ```
 ├── dataset               # Raw data files
 │   ├── training          # Training data files (2007-2015)
-│   ├── eval              # Test data and labels
+│   ├── evaluation        # Test data and labels (renamed from 'eval')
 │   └── Matchups_metadata.txt  # Data dictionary
 ├── src                   # Source code
 │   ├── data              # Data processing modules

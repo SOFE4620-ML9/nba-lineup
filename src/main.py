@@ -39,9 +39,9 @@ def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='NBA Lineup Prediction')
     
-    # Updated data path argument
-    parser.add_argument('--data-path', type=str, default='data/raw/nba_games.csv',
-                        help='Path to raw data CSV file')
+    # Changed default data path to point to dataset directory
+    parser.add_argument('--data-path', type=str, default='dataset',
+                        help='Path to directory containing training/evaluation data')
     
     # Remove any existing --data-dir arguments
     # parser.add_argument('--data-dir', ...)  # Delete this if exists
@@ -79,8 +79,8 @@ def main():
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
     
-    # Initialize components with data path
-    loader = NBADataLoader(data_path=args.data_path)  # Changed from data_dir
+    # Initialize components with corrected data path
+    loader = NBADataLoader(data_path=args.data_path)
     engineer = NBAFeatureEngineer()
     
     # Load and preprocess data

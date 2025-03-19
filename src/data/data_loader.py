@@ -25,51 +25,73 @@ COLUMN_MAPPING = {
 }
 
 class NBADataLoader:
-    """
-    Class responsible for loading and preprocessing NBA game data.
-    
-    Attributes:
-        data_path (str): Path to the raw NBA game data CSV file
-        _player_candidates (list): List of player candidates
-        logger (Logger): Logger for the data loader
-    """
-    
-    def __init__(self, data_path='data/raw/nba_games.csv'):  # Changed from data_dir
+    def __init__(self, data_path, metadata_path):
         """
         Initialize the data loader.
-        
         Args:
-            data_path (str): Path to the raw NBA game data CSV file
+            data_path (str): Path to directory containing training/evaluation data
+            metadata_path (str): Path to the player statistics metadata file
         """
         self.data_path = data_path
+        self.training_dir = os.path.join(data_path, 'training')  # Changed to use data_path
+        self.eval_dir = os.path.join(data_path, 'evaluation')
+        self.metadata_path = metadata_path
         self._player_candidates = None
-        self.logger = logging.getLogger('nba_data_loader')
+        self.player_stats = {}
+        self.training_data = None
+        self._load_player_stats()
+
+    def _load_player_stats(self):
+        """Load player statistics from metadata with validation."""
+        try:
+            stats_df = pd.read_csv(self.metadata_path, sep='\t')
+            
+            # Add default stats for missing players
+            default_stats = {
+                'ppg': 0.0,
+                'rpg': 0.0,
+                'apg': 0.0,
+                # ... other default stats ...
+            }
+            
+            for _, row in stats_df.iterrows():
+                self.player_stats[row['player_id']] = row.to_dict()
+                
+            # Add fallback for unknown players
+            self.player_stats['default'] = default_stats
+            
+        except Exception as e:
+            logger.error(f"Failed to load player stats: {str(e)}")
+            raise
+
+    def get_player_stats(self, player_id):
+        """Get stats for a player with fallback to defaults."""
+        stats = self.player_stats.get(player_id, self.player_stats['default'])
+        if stats is self.player_stats['default']:
+            logger.warning(f"Using default stats for missing player: {player_id}")
+        return stats
+
     def load_training_data(self, years=None):
-        """
-        Load training data for specified years.
+        """Load training data from annual CSV files."""
+        logger.info(f"Loading training data from {self.training_dir}")
         
-        Args:
-            years (list): List of years to load data for. If None, loads all years.
+        # Find all training files
+        training_files = glob(os.path.join(self.training_dir, 'matchups-*.csv'))
         
-        Returns:
-            pd.DataFrame: Combined training data
-        """
-        logger.info("Loading training data...")
+        # Filter by years if specified
+        if years:
+            year_pattern = r'matchups-(\d{4})\.csv'
+            training_files = [
+                f for f in training_files
+                if int(re.search(year_pattern, f).group(1)) in years
+            ]
         
-        if years is None:
-            # Load all years
-            file_pattern = os.path.join(self.training_dir, 'matchups-*.csv')
-            files = sorted(glob(file_pattern))
-        else:
-            # Load specific years
-            files = [os.path.join(self.training_dir, f'matchups-{year}.csv') for year in years]
-        
-        if not files:
+        if not training_files:
             raise FileNotFoundError(f"No training data files found in {self.training_dir}")
         
         # Load and concatenate all data files
         dataframes = []
-        for file in files:
+        for file in training_files:
             logger.info(f"Loading file: {file}")
             year = os.path.basename(file).split('-')[1].split('.')[0]
             df = pd.read_csv(file)
@@ -86,7 +108,7 @@ class NBADataLoader:
         self.training_data = self.preprocess_data(self.training_data)
         
         return self.training_data
-    
+
     def load_test_data(self):
         """
         Load test data and labels.

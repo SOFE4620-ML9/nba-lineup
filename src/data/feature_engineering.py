@@ -183,35 +183,33 @@ class NBAFeatureEngineer:
         return feature_df
     
     def transform_training_data(self, df):
-        """
-        Transform training data and extract labels.
+        """Transform raw data into features suitable for model training."""
+        if df.empty:
+            raise ValueError("Empty DataFrame received for transformation")
         
-        Args:
-            df (pd.DataFrame): Training data
+        # Create copy to avoid SettingWithCopyWarning
+        X = df.copy()
+        
+        # Feature: Home team lineup strength
+        X['home_lineup_strength'] = X[self.home_players].apply(
+            lambda row: self._calculate_lineup_strength(row), axis=1
+        )
+        
+        # Feature: Away team lineup strength
+        X['away_lineup_strength'] = X[self.away_players].apply(
+            lambda row: self._calculate_lineup_strength(row), axis=1
+        )
+
+        # Add validation check
+        valid_mask = X[self.required_columns].notnull().all(axis=1)
+        if not valid_mask.any():
+            raise ValueError("No valid training samples after preprocessing")
             
-        Returns:
-            tuple: (X, y) where X is features and y is labels
-        """
-        logger.info("Transforming training data...")
-        
-        # Extract features
-        X = self.transform(df)
-        
-        # Extract labels (actual fifth player)
-        y = []
-        for _, row in df.iterrows():
-            fifth_player = row.get('home_player_5', '?')  # Changed from 'home_4'
-            if fifth_player != '?' and not pd.isna(fifth_player):
-                y.append(fifth_player)
-        
-        # Remove rows where label is missing
-        valid_mask = [y_i is not None for y_i in y]
         X = X[valid_mask]
-        y = [y_i for i, y_i in enumerate(y) if valid_mask[i]]
+        y = X['optimal_player']
         
-        logger.info(f"Transformed training data shape: X={X.shape}, y={len(y)}")
+        logger.info(f"Transformed data shape: {X.shape}")
         return X, y
-    
     def transform_test_data(self, df):
         """
         Transform test data.

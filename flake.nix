@@ -1,9 +1,7 @@
 {
   description = "NBA Lineup Prediction Project";
 
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
-  };
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
 
   outputs = { self, nixpkgs }:
     let
@@ -16,24 +14,56 @@
         ps.matplotlib
         ps.joblib
         ps.tqdm
+        ps.pyyaml
+        ps.seaborn
+        ps.pytest  # Add pytest here
       ]);
+      
+      # Fix dataset path to match project structure
+      commonArgs = "--data-path ./dataset";  # Changed from ${self}/dataset
+      
     in {
-      packages.${system}.default = pythonEnv;
+      apps.${system} = {
+        default = {
+          type = "app";
+          program = "${pkgs.writeShellScriptBin "nba-lineup" ''
+            #!${pkgs.runtimeShell}
+            export PYTHONPATH=${self}/src:${self}:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH
+            cd ${self}
+            ${pythonEnv}/bin/python -m src.main ${commonArgs} "$@"
+          ''}/bin/nba-lineup";
+        };
 
-      apps.${system}.default = {
-        type = "app";
-        program = toString (pkgs.writeShellScriptBin "nba-lineup" ''
-          #!${pkgs.runtimeShell}
-          ${pythonEnv}/bin/python ${self}/src/main.py \
-            --data-path ${self}/data/raw/nba_games.csv "$@"
-        '');
+        run-full = {
+          type = "app";
+          program = "${pkgs.writeShellScriptBin "nba-lineup-full" ''
+            #!${pkgs.runtimeShell}
+            export PYTHONPATH=${self}/src:${self}:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH
+            cd ${self}
+            ${pythonEnv}/bin/python -m src.main ${commonArgs} --years 2007-2015 "$@"
+          ''}/bin/nba-lineup-full";
+        };
+
+        test = {
+          type = "app";
+          program = "${pkgs.writeShellScriptBin "nba-lineup-test" ''
+            #!${pkgs.runtimeShell}
+            export PYTHONPATH=${self}/src:${self}:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH
+            cd ${self}
+            ${pythonEnv}/bin/python -m pytest ${self}/tests
+          ''}/bin/nba-lineup-test";
+        };
       };
 
       devShells.${system}.default = pkgs.mkShell {
-        buildInputs = [ pythonEnv ];
+        packages = [ 
+          pythonEnv
+          pkgs.pytest  # Add pytest to dev shell
+        ];
         shellHook = ''
+          export PYTHONPATH=$PWD/src:$PYTHONPATH
           echo "NBA Lineup Prediction development shell"
-          echo "Python packages available: pandas, numpy, scikit-learn, matplotlib"
+          echo "Python packages available: pandas, numpy, scikit-learn, matplotlib, pytest"
         '';
       };
     };
