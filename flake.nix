@@ -55,8 +55,8 @@
             name = "run-model";
             runtimeInputs = [ pythonEnv ];
             text = ''
-              export PYTHONPATH="${self}/src:$PYTHONPATH"
-              python ${self}/src/main.py \
+              export PYTHONPATH="$PWD/src:$PYTHONPATH"
+              ${pythonEnv}/bin/python "$PWD/src/main.py" \
                 --data-dir dataset \
                 --output-dir output \
                 --model-type random_forest \
@@ -86,12 +86,12 @@
               pandas numpy scikit-learn matplotlib seaborn pyyaml
             ]);
           in "${pkgs.writeShellScriptBin "test" ''
-            export PYTHONPATH="${projectDir}/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
-            ${pythonEnv}/bin/python ${projectDir}/src/main.py \
-              --data-dir dataset \
-              --output-dir output \
+            export PYTHONPATH="$PWD/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
+            ${pythonEnv}/bin/python "$PWD/src/main.py" \
+              --data-dir "$PWD/dataset" \
+              --output-dir "$PWD/output" \
               --model-type random_forest \
-              --load-model output/random_forest_model \
+              --load-model "$PWD/output/random_forest_model" \
               --visualize \
               --years 2015 \
               "$@"
@@ -100,7 +100,5 @@
 
         apps.report = {
           type = "app";
-          program = "${projectDir}/src/report/generator.py";
+          program = "${self}/src/report/generator.py";
         };
-      });
-}
