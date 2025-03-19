@@ -102,3 +102,5 @@
           type = "app";
           program = "${self}/src/report/generator.py";
         };
+      });
+}        
