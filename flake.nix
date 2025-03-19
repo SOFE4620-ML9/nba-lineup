@@ -50,30 +50,32 @@
           ];
         };
         apps = {
-          x86_64-linux.default = pkgs.writeShellApplication {
-            name = "nba-lineup";
-            runtimeInputs = [ pythonEnv ];
-            text = ''
-              export PYTHONPATH="${self}/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
-              ${pythonEnv}/bin/python -m src.main \
-                --data-path "${self}/dataset" \
-                --output-dir "${self}/output" \
-                --model-type random_forest \
-                "$@"
-            '';
-          };
+          x86_64-linux = {
+            default = pkgs.writeShellApplication {
+              name = "nba-lineup";
+              runtimeInputs = [ pythonEnv ];
+              text = ''
+                export PYTHONPATH="${self}/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
+                ${pythonEnv}/bin/python -m src.main \
+                  --data-path "${self}/dataset" \
+                  --output-dir "${self}/output" \
+                  --model-type random_forest \
+                  "$@"
+              '';
+            };
 
-          x86_64-linux.run-full = pkgs.writeShellApplication {
-            name = "run-full";
-            runtimeInputs = [ pythonEnv ];
-            text = ''
-              export PYTHONPATH="${self}/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
-              ${pythonEnv}/bin/python -m src.main \
-                --full \
-                --data-path "${self}/dataset" \
-                --output-dir "${self}/output" \
-                --model-type random_forest
-            '';
+            run-full = pkgs.writeShellApplication {
+              name = "run-full";
+              runtimeInputs = [ pythonEnv ];
+              text = ''
+                export PYTHONPATH="${self}/src:${pythonEnv}/${pythonEnv.sitePackages}:$PYTHONPATH"
+                ${pythonEnv}/bin/python -m src.main \
+                  --full \
+                  --data-path "${self}/dataset" \
+                  --output-dir "${self}/output" \
+                  --model-type random_forest
+              '';
+            };
           };
         };
       });
