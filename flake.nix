@@ -1,6 +1,7 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    #nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/205fd4226592cc83fd4c0885a3e4c9c400efabb5"; # Pinned to working version
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -48,7 +49,7 @@
 
         apps.run-full = {
           type = "app";
-          program = "${projectDir}/run_model.sh --data-dir dataset --output-dir full-output --model-type random_forest --save-model --visualize --years 2007-2015";
+          program = "${projectDir}/run_model.sh";
         };
 
         apps.test = {

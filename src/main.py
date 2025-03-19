@@ -67,9 +67,15 @@ def main():
     """Main function for the NBA lineup prediction project."""
     args = parse_args()
     
+    # Add early validation
+    if not os.path.exists(args.test_data):
+        raise FileNotFoundError(f"Test data file {args.test_data} not found")
+        
+    if not os.path.isdir(args.output_dir):
+        os.makedirs(args.output_dir, exist_ok=True)
+
     # Convert to absolute path early
     args.output_dir = os.path.abspath(args.output_dir)
-    os.makedirs(args.output_dir, exist_ok=True)
     print(f"DEBUG: Writing outputs to {args.output_dir}")  # For verification
     
     # Validate arguments early
