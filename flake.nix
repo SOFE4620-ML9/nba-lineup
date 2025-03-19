@@ -1,7 +1,6 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
-    #nixpkgs.url = "github:NixOS/nixpkgs/205fd4226592cc83fd4c0885a3e4c9c400efabb5"; # Pinned to working version
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -9,7 +8,16 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        projectDir = ./.;
+        pythonEnv = pkgs.python312.withPackages (ps: with ps; [
+          pandas
+          numpy
+          scikit-learn
+          matplotlib
+          seaborn
+          scipy
+          openpyxl
+          pyyaml
+        ]);
       in {
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
@@ -22,9 +30,10 @@
             python312Packages.jupyter
             python312Packages.scipy
             python312Packages.openpyxl
+            python312Packages.pyyaml
           ];
           shellHook = ''
-            export PYTHONPATH="${projectDir}/src:$PYTHONPATH"
+            export PYTHONPATH="${self}/src:$PYTHONPATH"
             echo "NBA Lineup Prediction dev shell activated"
           '';
         };
@@ -42,35 +51,32 @@
         };
         apps.default = {
           type = "app";
-          program = let
-            pkgs = nixpkgs.legacyPackages.${system};
-            script = pkgs.writeShellScriptBin "run-model" ''
-              #!/usr/bin/env bash
-              export PYTHONPATH="${projectDir}/src:$PYTHONPATH"
-              ${pkgs.python312}/bin/python ${projectDir}/src/main.py \
+          program = pkgs.writeShellApplication {
+            name = "run-model";
+            runtimeInputs = [ pythonEnv ];
+            text = ''
+              export PYTHONPATH="${self}/src:$PYTHONPATH"
+              python ${self}/src/main.py \
                 --data-dir dataset \
                 --output-dir output \
                 --model-type random_forest \
                 "$@"
             '';
-          in "${script}/bin/run-model";
+          };
         };
         apps.run-full = {
           type = "app";
-          program = let 
-            pkgs = nixpkgs.legacyPackages.${system};
-            pythonEnv = pkgs.python312.withPackages(ps: with ps; [
-              pandas numpy scikit-learn matplotlib seaborn jupyter scipy openpyxl
-            ]);
-            script = pkgs.writeShellScriptBin "run-full" ''
-              export PYTHONPATH="${projectDir}/src:$PYTHONPATH"
-              ${pythonEnv}/bin/python ${projectDir}/src/main.py \
-                --data-dir dataset \
-                --output-dir output \
-                --model-type random_forest \
-                "$@"
+          program = pkgs.writeShellApplication {
+            name = "run-full";
+            runtimeInputs = [ pythonEnv ];
+            text = ''
+              export PYTHONPATH="${self}/src:$PYTHONPATH"
+              python ${self}/src/main.py \
+                --test-data "${self}/dataset/evaluation/NBA_test.csv" \
+                --output "${self}/output/predictions.csv" \
+                --debug
             '';
-          in "${script}/bin/run-full";
+          };
         };
 
         apps.test = {
