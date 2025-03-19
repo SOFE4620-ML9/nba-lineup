@@ -13,6 +13,20 @@
 
       commonArgs = "--data-path ${self}/dataset --years 2015 --output-dir ./output";
 
+      testScript = pkgs.writeShellScriptBin "nba-test" ''
+        # Create temporary test directory
+        TEST_DIR=$(mktemp -d)
+        cp -r ${self.packages.${system}.nba-lineup-tests}/tests/. "$TEST_DIR"
+        chmod -R u+w "$TEST_DIR"
+        
+        # Run pytest in isolated environment
+        ${self.packages.${system}.nba-lineup}/bin/nba-python -m pytest \
+          "$TEST_DIR" -vv "$@"
+        
+        # Cleanup
+        rm -rf "$TEST_DIR"
+      '';
+
     in {
       packages.${system} = {
         default = pythonEnv;
@@ -30,9 +44,10 @@
 
         nba-lineup-tests = pkgs.stdenv.mkDerivation {
           name = "nba-lineup-tests";
-          src = self;
+          src = ./.;
           installPhase = ''
             mkdir -p $out/tests
+            touch $out/tests/__init__.py
             if [ -d tests ]; then
               cp -r tests/* $out/tests/
             fi
@@ -60,14 +75,7 @@
 
         test = {
           type = "app";
-          program = "${pkgs.writeShellScriptBin "nba-test" ''
-            mkdir -p tests
-            if [ -d ${self.packages.${system}.nba-lineup-tests}/tests ]; then
-              cp -r ${self.packages.${system}.nba-lineup-tests}/tests/* ./tests/
-            fi
-            ${self.packages.${system}.nba-lineup}/bin/nba-python -m pytest \
-              tests/ -vv "$@"
-          ''}/bin/nba-test";
+          program = "${testScript}/bin/nba-test";
         };
       };
     };
