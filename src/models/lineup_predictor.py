@@ -14,7 +14,7 @@ import logging
 import joblib
 import os
 import random
-from src.data.data_loader import load_preprocessed_data  # Instead of 'from src.data...'
+from src.data.data_loader import NBADataLoader  # Changed import
 
 # Set random seed for reproducibility
 random.seed(42)
@@ -727,18 +727,18 @@ if __name__ == "__main__":
     import numpy as np
     
     # Create dummy data
-    X = pd.DataFrame(np.random.randn(100, 10))
-    y = np.random.randint(0, 2, 100)
-    
+    path = 'path_to_preprocessed_data.csv'  # Define the path to the preprocessed data
+    df = NBADataLoader().load_preprocessed_data(path)  # Access via class
+
     # Create the model
     model = LineupPredictor(model_type='random_forest')
     
     # Train the model
-    model.train(X, y)
+    model.train(df.drop('target', axis=1), df['target'])
     
     # Evaluate the model
-    X_test = pd.DataFrame(np.random.randn(20, 10))
-    y_test = np.random.randint(0, 2, 20)
+    X_test = df.drop('target', axis=1).sample(frac=0.2, random_state=42)
+    y_test = df.loc[X_test.index, 'target']
     metrics = model.evaluate(X_test, y_test)
     
     print(f"Test accuracy: {metrics['accuracy']:.4f}") 
