@@ -14,7 +14,7 @@ import logging
 import joblib
 import os
 import random
-from src.data.data_loader import NBADataLoader  # Changed import
+from src.data.data_loader import NBADataLoader  # Absolute import
 
 # Set random seed for reproducibility
 random.seed(42)

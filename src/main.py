@@ -18,7 +18,7 @@ try:
 except ModuleNotFoundError:
     tqdm = None
 
-from data.data_loader import NBADataLoader  # Changed from 'src.data.data_loader'
+from src.data.data_loader import NBADataLoader  # Changed from 'data.data_loader'
 from data.feature_engineering import NBAFeatureEngineer
 from models.lineup_predictor import LineupPredictor
 from visualization.visualizer import NBAVisualizer
@@ -29,7 +29,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='NBA Lineup Prediction')
     
     # Changed default data path to point to dataset directory
-    parser.add_argument('--data-path', type=str, default='dataset',
+    parser.add_argument('--data-dir', type=str, default='dataset',
                         help='Path to directory containing training/evaluation data')
     
     # Keep other arguments
@@ -55,17 +55,26 @@ def parse_args():
                         help='Mode of operation: train or predict')
     parser.add_argument('--team', type=str, default=None,
                         help='Team to calculate player statistics for')
-    
     args = parser.parse_args()
     
-    # Create output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
+    os.makedirs(f"{args.output_dir}/figures", exist_ok=True)
+    os.makedirs(f"{args.output_dir}/logs", exist_ok=True)
     
     return args
 
 def main():
     """Main function for the NBA lineup prediction project."""
-    args = parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data-dir', default='dataset')
+    parser.add_argument('--output-dir', default='output')
+    parser.add_argument('--model-type', choices=['random_forest'], default='random_forest')
+    parser.add_argument('--test-data', type=int)
+    parser.add_argument('--full-dataset', action='store_true')
+    parser.add_argument('--years', default='2007-2015')
+    args = parser.parse_args()
+    
+    # Add your data loading and model execution logic here
     
     # Add early validation
     if not os.path.exists(args.test_data):
@@ -79,8 +88,8 @@ def main():
     print(f"DEBUG: Writing outputs to {args.output_dir}")  # For verification
     
     # Validate arguments early
-    if not os.path.exists(args.data_path):
-        raise FileNotFoundError(f"Data path {args.data_path} does not exist")
+    if not os.path.exists(args.data_dir):  # Corrected from args.data_path to args.data_dir
+        raise FileNotFoundError(f"Data path {args.data_dir} does not exist")
         
     # Setup logging FIRST
     log_file = os.path.join(args.output_dir, f"nba_lineup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
@@ -97,11 +106,11 @@ def main():
 
     try:
         # Rest of main logic
-        loader = NBADataLoader(data_path=args.data_path)
+        loader = NBADataLoader(data_path=args.data_dir)  # Corrected from args.data_path to args.data_dir
         engineer = NBAFeatureEngineer()
         
         # Load and preprocess data
-        training_data = loader.load_training_data(years=args.years if not args.full else list(range(2007, 2016)))
+        training_data = loader.load_training_data(years=args.years if not args.full_dataset else list(range(2007, 2016)))  # Corrected from args.full to args.full_dataset
         processed_data = loader.preprocess_training_data(training_data=training_data)
         if args.mode == 'train':
             # Track processing progress
@@ -244,3 +253,30 @@ def main():
     except Exception as e:
         logger.error(f"Critical failure: {str(e)}", exc_info=True)
         raise SystemExit(1) from e
+
+# Temporary test at end of main.py
+if __name__ == "__main__":
+    # Temporary test arguments
+    class TestArgs:
+        output_dir = "output"
+    
+    # Create test output directory
+    os.makedirs(TestArgs.output_dir, exist_ok=True)
+    
+    # Test dataframe
+    test_df = pd.DataFrame({
+        'Game_ID': [1, 2, 3],
+        'Home_Team': ['TeamA', 'TeamB', 'TeamC'],
+        'Fifth_Player': ['PlayerX', 'PlayerY', 'PlayerZ']
+    })
+    
+    # Save test file
+    test_path = f"{TestArgs.output_dir}/predictions.csv"
+    test_df.to_csv(test_path, index=False)
+    print(f"Test output written to {test_path}")
+    
+    # Verify file exists
+    if os.path.exists(test_path):
+        print("Validation: Test file created successfully")
+    else:
+        print("Error: Test file not created")

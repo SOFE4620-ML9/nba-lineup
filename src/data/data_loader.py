@@ -220,12 +220,15 @@ class NBADataLoader:
         logger.info("Test data preprocessing complete")
         
         return df
-    @staticmethod
-    def load_preprocessed_data(data_path: str) -> pd.DataFrame:
+    def load_preprocessed_data(self, path):
         """Load and return preprocessed data"""
-        # Implement your actual data loading logic here
-        # Example:
-        return pd.read_csv(os.path.join(data_path, "processed_data.csv"))
+        # Add proper test data loading logic
+        if "test" in path.lower():
+            return pd.read_csv(path).dropna(subset=['home_player_5'])
+        return pd.concat(
+            [pd.read_csv(f) for f in Path(self.data_path).glob("*.csv")],
+            ignore_index=True
+        )
     
     def _handle_missing_values(self, df):
         """

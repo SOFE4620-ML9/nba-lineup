@@ -18,19 +18,38 @@
           openpyxl
           pyyaml
         ]);
-        # Create proper app definitions
+        
         nba-lineup-script = pkgs.writeShellScriptBin "nba-lineup" ''
-          # Use absolute path to project source from Nix store
           export PYTHONPATH="${self.outPath}/src:${pythonEnv}/${pythonEnv.sitePackages}"
           ${pythonEnv}/bin/python -m src.main "$@"
         '';
       in {
-        # Correct dev shell configuration
         devShells.default = pkgs.mkShell {
-          packages = [ pythonEnv ];
+          packages = [ 
+            pythonEnv 
+            nba-lineup-script
+          ];
+          
+          # Add these environment variables
+          PYTHONPATH = "${self.outPath}/src:${pythonEnv}/${pythonEnv.sitePackages}";
+          PWD = "${self.outPath}";
+          
+          shellHook = ''
+            run_model() {
+              nba-lineup --data-dir dataset --output-dir output --model-type random_forest --test-data "''${1:-2015}"
+            }
+            run_full() {
+              nba-lineup --data-dir dataset --output-dir output --model-type random_forest --full-dataset --years 2007-2015
+            }
+            
+            export -f run_model run_full  # Critical for making functions available
+            
+            echo "Available commands:"
+            echo "run_model [YEAR] - Run with sample dataset (default: 2015)"
+            echo "run_full         - Run with full dataset (2007-2015)"
+          '';
         };
 
-        # Correct app structure with proper typing
         apps = {
           run-sample = {
             type = "app";
@@ -41,6 +60,7 @@
             type = "app";
             program = "${nba-lineup-script}/bin/nba-lineup";
           };
+
 
           default = self.apps.${system}.run-sample;
         };

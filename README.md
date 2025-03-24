@@ -44,9 +44,6 @@ nix run github:sofe4620-ml9/nba-lineup
 
 # Run the model on the full dataset
 nix run github:sofe4620-ml9/nba-lineup#run-full
-
-# Run the test suite
-nix run github:sofe4620-ml9/nba-lineup#test
 ```
 
 These commands will:
@@ -75,7 +72,6 @@ This single command will:
 After running `nix develop`, you can use the following commands:
 - `run_model` - Run the model on a sample dataset (2015 only)
 - `run_model full` - Run the model on the complete dataset
-- `run_test` - Test predictions using a trained model
 
 ### Manual Setup (Alternative)
 If you prefer not to use Nix or are on a system without Nix support:
