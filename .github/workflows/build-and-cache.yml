@@ -36,7 +36,7 @@ jobs:
         run: nix build --print-build-logs
         
       - name: Build full model runner
-        run: nix build .#run-full --print-build-logs
+        run: nix build .#packages.x86_64-linux.run-full --print-build-logs
         
       - name: Build test runner
-        run: nix build .#test --print-build-logs 
+        run: nix build .#test --print-build-logs

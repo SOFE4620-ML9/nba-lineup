@@ -1,4 +1,6 @@
 {
+  description = "NBA Lineup Nix Flake";
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
     flake-utils.url = "github:numtide/flake-utils";
@@ -65,6 +67,23 @@
           default = self.apps.${system}.run-sample;
         };
         
-        packages.default = nba-lineup-script;
+        packages = {
+          default = nba-lineup-script;
+
+          # Fixing the run-full package definition
+          run-full = pkgs.stdenv.mkDerivation {
+            name = "run-full";
+            src = ./.;
+            buildInputs = [ pkgs.deterministic-kvm ];  # Add necessary build inputs here
+            buildPhase = ''
+              echo "Building project..."
+              # Add build steps here
+            '';
+            installPhase = ''
+              mkdir -p $out/bin
+              cp -r * $out/bin/
+            '';
+          };
+        };
       });
 }
