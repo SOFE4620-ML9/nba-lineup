@@ -1,88 +1,89 @@
 {
-  description = "NBA Lineup Analysis";
+  description = "NBA Lineup Nix Flake";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.11";
-    nixpkgs-unstable.url = "github:nixos/nixpkgs/nixos-unstable";
-    # NixOS-WSL for helper functions
-    nixos-wsl.url = "github:nix-community/NixOS-WSL";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, nixpkgs-unstable, ... }@inputs: 
-  let
-    allSystems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"];
-    forAllSystems = nixpkgs.lib.genAttrs allSystems;
-
-    # Add this new overlay to make unstable packages available
-    overlayUnstable = _: prev: {
-      unstable = import nixpkgs-unstable {
-        inherit (prev) system;
-        config.allowUnfree = true;
-      };
-    };
-
-    overlays = {
-      unstable = overlayUnstable;
-    };
-  in {
-    inherit overlays;
-
-    # Development shells for different platforms
-    devShells = forAllSystems (
-      system: let
-        pkgs = import nixpkgs {
-          inherit system;
-          config = {
-            allowUnfree = true;
-            experimental-features = ["nix-command" "flakes"];
-          };
-        };
+  outputs = { self, nixpkgs, flake-utils }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        pkgs = nixpkgs.legacyPackages.${system};
+        pythonEnv = pkgs.python312.withPackages (ps: with ps; [
+          pandas
+          numpy
+          scikit-learn
+          matplotlib
+          seaborn
+          scipy
+          openpyxl
+          pyyaml
+        ]);
+        
+        nba-lineup-script = pkgs.writeShellScriptBin "nba-lineup" ''
+          export PYTHONPATH="${self.outPath}/src:${pythonEnv}/${pythonEnv.sitePackages}"
+          ${pythonEnv}/bin/python -m src.main "$@"
+        '';
       in {
-        default = pkgs.mkShell {
-          name = "nba-lineup-dev-shell";
-          nativeBuildInputs = with pkgs; [
-            # Git
-            git
-
-            # Python environment
-            python312
-            python312Packages.pip
-            pipenv
-
-            # Development tools
-            nodejs_20
-            nodePackages.npm
-
-            # Shell utilities
-            bashInteractive
-            bash-completion
+        devShells.default = pkgs.mkShell {
+          packages = [ 
+            pythonEnv 
+            nba-lineup-script
           ];
+          
+          # Add these environment variables
+          PYTHONPATH = "${self.outPath}/src:${pythonEnv}/${pythonEnv.sitePackages}";
+          PWD = "${self.outPath}";
+          
           shellHook = ''
-            echo "NBA Lineup development environment activated!"
-            # Set up local environment if needed
-            if [ ! -d "./venv" ]; then
-              echo "Setting up Python virtual environment..."
-              python -m venv venv
-            fi
+            run_model() {
+              nba-lineup --data-dir dataset --output-dir output --model-type random_forest --test-data "''${1:-2015}"
+            }
+            run_full() {
+              nba-lineup --data-dir dataset --output-dir output --model-type random_forest --full-dataset --years 2007-2015
+            }
             
-            # Use virtual environment
-            source venv/bin/activate
+            export -f run_model run_full  # Critical for making functions available
             
-            # Ensure git is properly configured for VSCode
-            git config --local core.editor "code --wait"
-            
-            # Create symbolic link to git in /bin if it doesn't exist
-            if [ ! -e /bin/git ] && [ -e "$(which git)" ]; then
-              if [ -w /bin ]; then
-                ln -sf "$(which git)" /bin/git
-                echo "Created symlink for git in /bin"
-              else
-                echo "Warning: Cannot create symlink in /bin (need sudo)"
-              fi
-            fi
+            echo "Available commands:"
+            echo "run_model [YEAR] - Run with sample dataset (default: 2015)"
+            echo "run_full         - Run with full dataset (2007-2015)"
           '';
         };
-      }
-    );
-  };
-} 
+
+        apps = {
+          run-sample = {
+            type = "app";
+            program = "${nba-lineup-script}/bin/nba-lineup";
+          };
+          
+          run-full = {
+            type = "app";
+            program = "${nba-lineup-script}/bin/nba-lineup";
+          };
+
+
+          default = self.apps.${system}.run-sample;
+        };
+        
+        packages = {
+          default = nba-lineup-script;
+
+          # Fixing the run-full package definition
+          run-full = pkgs.stdenv.mkDerivation {
+            name = "run-full";
+            src = ./.;
+            buildInputs = [ pkgs.deterministic-kvm ];  # Add necessary build inputs here
+            buildPhase = ''
+              echo "Building project..."
+              # Add build steps here
+            '';
+            installPhase = ''
+              mkdir -p $out/bin
+              cp -r * $out/bin/
+            '';
+          };
+        };
+      });
+}
